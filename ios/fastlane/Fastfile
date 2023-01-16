@@ -1,0 +1,93 @@
+opt_out_usage
+def root_path
+  Dir.pwd.sub(/.*\Kfastlane/, '').sub(/.*\Kandroid/, '').sub(/.*\Kios/, '').sub(/.*\K\/\//, '')
+end
+
+versionName = 0
+versionCode = 0
+
+lane :sh_on_root do |options|
+  command = options[:command]
+  sh("cd #{root_path} && #{command}")
+end
+
+lane :initz do
+  ios_set_version(version: "1.0.0")
+  ios_set_build_number
+  # ios_set_build_number(build_number: "0")
+  versionName = ios_get_version
+  versionCode = ios_get_build_number
+end
+
+lane :fetch_dependencies do
+
+    install_provisioning_profile(path: "#{root_path}/ios/provisioning/ex_add_hoc_REPLACE_HERE.mobileprovision")
+
+    install_provisioning_profile(path: "#{root_path}/ios/provisioning/ex_notify_adhoc_REPLACE_HERE.mobileprovision")
+
+    update_project_provisioning(
+        xcodeproj: "ExampleApp.xcodeproj_REPLACE_HERE",
+        target_filter: "ExampleApp_REPLACE_HERE",
+        profile: "#{root_path}/ios/provisioning/ex_add_hoc_REPLACE_HERE.mobileprovision",
+     )
+    update_project_provisioning(
+        xcodeproj: "AppZippo.xcodeproj",
+        target_filter: "ImageNotification",
+        profile: "#{root_path}/ios/provisioning/ex_notify_adhoc_REPLACE_HERE.mobileprovision",
+     )
+     update_project_team(
+      teamid: "CGP8PQM2AF"
+     )
+
+  cocoapods(
+    clean_install: true,
+    podfile: "./Podfile"
+  )
+  # sh_on_root(command: "cd ios && pod clean && pod install")
+end
+
+lane :build_ipa do
+  build_app(
+    output_name: "ExampleApp.ipa",
+    export_method: "ad-hoc",
+    output_directory: "#{root_path}/build",
+ )
+end
+
+lane :distribute_to_firebase do
+  release_note = "New ios build \nVersion Name: #{versionName} \nVersion Code: #{versionCode}"
+  firebase_app_distribution(
+    app: "1:545380132283:ios:dbbccb0d94d9556e4f109e_REPLACE_HERE",
+    # firebase login:ci
+    firebase_cli_token:'1//0e6JT0y82bFwhCgYIARAAGA4SNwF-L9IrJH_AN80Hrll0mPvqAGvKoJRbh5l6hdckfuit7CLN0wSVQRNDz5czSarTJOaaLALYgdU_REPLACE_HERE',
+    groups: "Hiko",
+    release_notes: release_note,
+    ipa_path: "#{root_path}/build/Example.ipa",
+  )
+end
+
+lane :notify_to_group do
+  telegram(
+    token: '1952840865:AAFLjRqIbbJ_MqPbGplINcdRI1nhUrS6Ofw_REPLACE_HERE',
+    chat_id: '-633757539_REPLACE_HERE',
+    text: "ExampleApp: New version IPA is deployed! \nVersion Name: #{versionName} \nVersion Code: #{versionCode}"
+  )
+  telegram(
+    token: '1952840865:AAFLjRqIbbJ_MqPbGplINcdRI1nhUrS6Ofw_REPLACE_HERE',
+    chat_id: '-798455147_REPLACE_HERE',
+    text: "ExampleApp: New version IPA is deployed! \nVersion Name: #{versionName} \nVersion Code: #{versionCode}"
+  )
+end
+
+default_platform(:ios)
+
+platform :ios do
+  desc "New iOS build for ExampleApp app"
+  lane :ioslane do
+    initz
+    fetch_dependencies
+    build_ipa
+    distribute_to_firebase
+    notify_to_group
+  end
+end
